@@ -152,14 +152,15 @@ This starts an interactive session with `invoiceguard_agent` directly, useful fo
 
 ## Deployment
 
-This app is deployed at: (https://invoiceguard-agent-production.up.railway.app/app)
-To reproduce the deployment (e.g. on Render):
-1. Push this repo to GitHub
-2. Create a new Web Service on [Render](https://render.com), connected to the repo
-3. Build command: `pip install -r requirements.txt`
-4. Start command: `uvicorn main:app --host 0.0.0.0 --port $PORT`
-5. Add `GEMINI_API_KEY` as an environment variable in Render's dashboard (never in code)
+This app is deployed at: **[https://invoiceguard-agent-production.up.railway.app/app](https://invoiceguard-agent-production.up.railway.app/app)**
 
+To reproduce the deployment (on Railway):
+1. Push this repo to GitHub
+2. Create a new project on [Railway](https://railway.com), deploying from the GitHub repo
+3. Set the custom start command: `uvicorn main:app --host 0.0.0.0 --port $PORT`
+4. Add `GEMINI_API_KEY` as an environment variable in Railway's Variables tab
+5. Generate a public domain under Settings → Networking
+   
 ## License
 
 Built for educational purposes as part of the AI Agents Vibe Coding Capstone. Free to use and adapt.
