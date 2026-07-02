@@ -269,6 +269,7 @@
             }
         }
 
+
         function renderResults(data) {
             const results = document.getElementById('results');
             const banner = document.getElementById('statusBanner');
@@ -278,51 +279,82 @@
 
             results.style.display = 'block';
             list.innerHTML = '';
+            emailCard.style.display = 'none';
 
-            const allIssues = [...data.discrepancies];
-            if (data.math_errors && data.math_errors.length > 0) {
-                data.math_errors.forEach(e => allIssues.push({
-                    type: 'math_error',
-                    description: e.message,
-                    severity: 'high',
-                    invoice_value: e.actual_value,
-                    po_value: e.expected_value
-                }));
-            }
-            if (data.duplicate_check && data.duplicate_check.is_duplicate) {
-                allIssues.push({
-                    type: 'duplicate_billing',
-                    description: data.duplicate_check.reason,
-                    severity: 'high',
-                    invoice_value: '-',
-                    po_value: '-'
-                });
-            }
-
-            if (allIssues.length === 0) {
-                banner.className = 'status-banner status-clean';
-                banner.textContent = '✅ No issues found, invoice matches the purchase order and math checks out.';
-            } else {
+            if (data.agent_response) {
+                // ADK agent response — display as formatted markdown-style text
                 banner.className = 'status-banner status-issues';
-                banner.textContent = `⚠️ ${allIssues.length} issue(s) found, review below.`;
-            }
+                banner.textContent = '⚠️ Agent audit complete — review findings below.';
 
-            allIssues.forEach(issue => {
+                // Check if it mentions no issues
+                const lower = data.agent_response.toLowerCase();
+                if (
+                    lower.includes('no issues') ||
+                    lower.includes('no discrepancies') ||
+                    lower.includes('no math errors') && !lower.includes('discrepancy') && !lower.includes('mismatch')
+                ) {
+                    banner.className = 'status-banner status-clean';
+                    banner.textContent = '✅ No issues found — invoice matches the purchase order and math checks out.';
+                }
+
+                // Display the agent's full response as a readable card
                 const div = document.createElement('div');
-                div.className = `discrepancy-card sev-${issue.severity}`;
-                div.innerHTML = `
-      <span class="sev-label">${issue.severity} · ${issue.type.replace(/_/g, ' ')}</span>
-      <p style="margin:6px 0 0;">${issue.description}</p>
-      <p style="margin:6px 0 0; font-size:13px; color:#5b6478;">Invoice: ${issue.invoice_value}  |  PO/Expected: ${issue.po_value}</p>
-    `;
+                div.style.cssText = 'white-space: pre-wrap; font-size: 14px; line-height: 1.6; color: #1a1f36;';
+                div.textContent = data.agent_response;
                 list.appendChild(div);
-            });
 
-            if (data.draft_email && data.draft_email.length > 0) {
-                emailCard.style.display = 'block';
-                emailText.textContent = data.draft_email;
-            } else {
-                emailCard.style.display = 'none';
+                // Check if a dispute email was drafted (look for "Subject:" in the response)
+                if (data.agent_response.includes('Subject:')) {
+                    const emailStart = data.agent_response.indexOf('Subject:');
+                    emailCard.style.display = 'block';
+                    emailText.textContent = data.agent_response.substring(emailStart);
+                }
+
+            } else if (data.discrepancies !== undefined) {
+                // Legacy orchestrator response shape (fallback)
+                const allIssues = [...data.discrepancies];
+                if (data.math_errors && data.math_errors.length > 0) {
+                    data.math_errors.forEach(e => allIssues.push({
+                        type: 'math_error',
+                        description: e.message,
+                        severity: 'high',
+                        invoice_value: e.actual_value,
+                        po_value: e.expected_value
+                    }));
+                }
+                if (data.duplicate_check && data.duplicate_check.is_duplicate) {
+                    allIssues.push({
+                        type: 'duplicate_billing',
+                        description: data.duplicate_check.reason,
+                        severity: 'high',
+                        invoice_value: '-',
+                        po_value: '-'
+                    });
+                }
+
+                if (allIssues.length === 0) {
+                    banner.className = 'status-banner status-clean';
+                    banner.textContent = '✅ No issues found — invoice matches the purchase order and math checks out.';
+                } else {
+                    banner.className = 'status-banner status-issues';
+                    banner.textContent = `⚠️ ${allIssues.length} issue(s) found — review below.`;
+                }
+
+                allIssues.forEach(issue => {
+                    const div = document.createElement('div');
+                    div.className = `discrepancy-card sev-${issue.severity}`;
+                    div.innerHTML = `
+        <span class="sev-label">${issue.severity} · ${issue.type.replace(/_/g, ' ')}</span>
+        <p style="margin:6px 0 0;">${issue.description}</p>
+        <p style="margin:6px 0 0; font-size:13px; color:#5b6478;">Invoice: ${issue.invoice_value} | PO/Expected: ${issue.po_value}</p>
+      `;
+                    list.appendChild(div);
+                });
+
+                if (data.draft_email && data.draft_email.length > 0) {
+                    emailCard.style.display = 'block';
+                    emailText.textContent = data.draft_email;
+                }
             }
         }
     </script>

@@ -98,14 +98,66 @@ def test_draft_email(payload: dict):
 
 @app.post("/process-invoice")
 async def process_invoice_endpoint(invoice_file: UploadFile, po_file: UploadFile):
+    import json
+    from google.adk.runners import Runner
+    from google.adk.sessions import InMemorySessionService
+    from google.genai.types import Content, Part
+    from agent.adk_agent import root_agent
+    from agent.extract import extract_invoice_data
+
+    # Step 1: Extract both documents (perception layer — before agent reasoning)
     invoice_bytes = await invoice_file.read()
     po_bytes = await po_file.read()
+    invoice_data = extract_invoice_data(invoice_bytes, invoice_file.content_type)
+    po_data = extract_invoice_data(po_bytes, po_file.content_type)
 
-    result = process_invoice(
-        invoice_bytes=invoice_bytes,
-        invoice_mime_type=invoice_file.content_type,
-        po_bytes=po_bytes,
-        po_mime_type=po_file.content_type,
+    # Step 2: Hand extracted JSON to the ADK agent for reasoning
+    session_service = InMemorySessionService()
+    session = await session_service.create_session(
+        app_name="invoiceguard",
+        user_id="web_user",
+        session_id="session_001"
     )
 
-    return result
+    runner = Runner(
+        agent=root_agent,
+        app_name="invoiceguard",
+        session_service=session_service
+    )
+
+    prompt = (
+        f"Here is an invoice and a purchase order, already extracted. "
+        f"Invoice: {json.dumps(invoice_data)}. "
+        f"Purchase order: {json.dumps(po_data)}. "
+        f"Please audit this invoice following your process."
+    )
+
+    user_message = Content(role="user", parts=[Part(text=prompt)])
+
+    agent_response = ""
+    try:
+        async for event in runner.run_async(
+            user_id="web_user",
+            session_id="session_001",
+            new_message=user_message
+        ):
+            if event.is_final_response() and event.content:
+                for part in event.content.parts:
+                    if part.text:
+                        agent_response += part.text
+    except Exception as e:
+        error_msg = str(e)
+        if "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg:
+            from fastapi import HTTPException
+            raise HTTPException(
+                status_code=503,
+                detail="The AI service is temporarily unavailable due to quota limits. Please try again in a few minutes."
+            )
+        raise
+
+    return {
+        "invoice_data": invoice_data,
+        "po_data": po_data,
+        "agent_response": agent_response,
+        "has_issues": bool(agent_response)
+    }
